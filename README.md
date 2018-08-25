@@ -29,12 +29,11 @@ expected to uphold this code.
 
 ## Read this first
 
-* If you believe you found a bug with how `fetch` behaves in your browser,
-  please **don't open an issue in this repository** unless you are testing in
-  an old version of a browser that doesn't support `window.fetch` natively.
-  This project is a _polyfill_, and since all modern browsers now implement the
-  `fetch` function natively, **no code from this project** actually takes any
-  effect there. See [Browser support](#browser-support) for detailed
+* If you believe you found a bug with how `fetch` behaves in Chrome or Firefox,
+  please **don't open an issue in this repository**. This project is a
+  _polyfill_, and since Chrome and Firefox both implement the `window.fetch`
+  function natively, no code from this project actually takes any effect in
+  these browsers. See [Browser support](#browser-support) for detailed
   information.
 
 * If you have trouble **making a request to another domain** (a different
@@ -44,6 +43,11 @@ expected to uphold this code.
   HTTP response headers, it is often nontrivial to set up or debug. CORS is
   exclusively handled by the browser's internal mechanisms which this polyfill
   cannot influence.
+
+* If you have trouble **maintaining the user's session** or [CSRF][] protection
+  through `fetch` requests, please ensure that you've read and understood the
+  [Sending cookies](#sending-cookies) section. `fetch` doesn't send cookies
+  unless you ask it to.
 
 * This project **doesn't work under Node.js environments**. It's meant for web
   browsers only. You should ensure that your application doesn't try to package
@@ -161,14 +165,18 @@ fetch('/avatars', {
 
 ### Caveats
 
+The `fetch` specification differs from `jQuery.ajax()` in mainly two ways that
+bear keeping in mind:
+
 * The Promise returned from `fetch()` **won't reject on HTTP error status**
   even if the response is an HTTP 404 or 500. Instead, it will resolve normally,
   and it will only reject on network failure or if anything prevented the
   request from completing.
 
-* For maximum browser compatibility when it comes to sending & receiving
-  cookies, always supply the `credentials: 'same-origin'` option instead of
-  relying on the default. See [Sending cookies](#sending-cookies).
+* By default, `fetch` **won't send or receive any cookies** from the server,
+  resulting in unauthenticated requests if the site relies on maintaining a user
+  session. See [Sending cookies](#sending-cookies) for how to opt into cookie
+  handling.
 
 #### Handling HTTP error statuses
 
@@ -202,41 +210,25 @@ fetch('/users')
 
 #### Sending cookies
 
-For [CORS][] requests, use `credentials: 'include'` to allow sending credentials
-to other domains:
-
-```javascript
-fetch('https://example.com:1234/users', {
-  credentials: 'include'
-})
-```
-
-To disable sending or receiving cookies for requests to any domain, including
-the current one, use the "omit" value:
-
-```javascript
-fetch('/users', {
-  credentials: 'omit'
-})
-```
-
-The default value for `credentials` is "same-origin".
-
-The default for `credentials` wasn't always the same, though. The following
-versions of browsers implemented an older version of the fetch specification
-where the default was "omit":
-
-* Firefox 39-60
-* Chrome 42-67
-* Safari 10.1-11.1.2
-
-If you target these browsers, it's advisable to always specify `credentials:
-'same-origin'` explicitly with all fetch requests instead of relying on the
-default:
+To automatically send cookies for the current domain, the `credentials` option
+must be provided:
 
 ```javascript
 fetch('/users', {
   credentials: 'same-origin'
+})
+```
+
+The "same-origin" value makes `fetch` behave similarly to XMLHttpRequest with
+regards to cookies. Otherwise, cookies won't get sent, resulting in these
+requests not preserving the authentication session.
+
+For [CORS][] requests, use the "include" value to allow sending credentials to
+other domains:
+
+```javascript
+fetch('https://example.com:1234/users', {
+  credentials: 'include'
 })
 ```
 
@@ -247,6 +239,10 @@ server is a [forbidden header name][] and therefore can't be programmatically
 read with `response.headers.get()`. Instead, it's the browser's responsibility
 to handle new cookies being set (if applicable to the current URL). Unless they
 are HTTP-only, new cookies will be available through `document.cookie`.
+
+Bear in mind that the default behavior of `fetch` is to ignore the `Set-Cookie`
+header completely. To opt into accepting cookies from the server, you must use
+the `credentials` option.
 
 #### Obtaining the Response URL
 
@@ -270,17 +266,17 @@ Firefox < 32, Chrome < 37, Safari, or IE.
 This polyfill supports
 [the abortable fetch API](https://developers.google.com/web/updates/2017/09/abortable-fetch).
 However, aborting a fetch requires use of two additional DOM APIs:
-[AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) and
+[AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController)
+and
 [AbortSignal](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal).
 Typically, browsers that do not support fetch will also not support
-AbortController or AbortSignal. Consequently, you will need to include
-[an additional polyfill](https://github.com/mo/abortcontroller-polyfill#readme)
-for these APIs to abort fetches:
+AbortController or AbortSignal. Consequently, you will need to include an
+additional polyfill for these APIs to abort fetches.
+
+Once you have an AbortController and AbortSignal polyfill in place, you can
+abort a fetch like so:
 
 ```js
-import 'abortcontroller-polyfill/dist/abortcontroller-polyfill-only'
-import {fetch} from 'whatwg-fetch'
-
 const controller = new AbortController()
 
 fetch('/avatars', {
@@ -292,7 +288,7 @@ fetch('/avatars', {
 })
 
 // some time later...
-controller.abort()
+controller.abort();
 ```
 
 ## Browser Support
